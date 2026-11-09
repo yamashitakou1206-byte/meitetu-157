@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="theme-color" content="#050505">
+<title>SOULBOUND - オリジナルRPG</title>
+<style>
+:root{color-scheme:dark;--gold:#ffdc55;--white:#f5f5f5;--red:#ff4242;--muted:#aaa}
+*{box-sizing:border-box}
+body{margin:0;background:#050505;color:var(--white);font-family:"Courier New",monospace;display:flex;justify-content:center;min-height:100vh}
+button{font: bold 16px "Courier New",monospace;color:var(--gold);background:#080808;border:2px solid var(--gold);padding:12px 8px;cursor:pointer;min-height:48px;touch-action:manipulation}
+button:hover,button:focus-visible{background:#3a2d08;outline:2px solid white;outline-offset:2px}
+button:disabled{opacity:.4;cursor:not-allowed}
+#game{width:min(100%,900px);padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px}
+header{text-align:center;border-bottom:2px solid #555;padding:7px}
+h1{font-size:clamp(25px,5vw,42px);letter-spacing:7px;margin:0;text-shadow:3px 3px #7b1d1d}
+.subtitle{color:#aaa;font-size:12px;margin-top:5px}
+#scene{height:clamp(150px,25vh,220px);position:relative;display:flex;align-items:center;justify-content:center;overflow:hidden}
+#enemy{font-size:clamp(64px,13vw,104px);filter:drop-shadow(0 0 12px #888);transition:transform .15s}
+#enemyName{position:absolute;bottom:5px;left:0;right:0;text-align:center;font-size:17px}
+#status{display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:14px;align-items:center}
+#hpbar{width:min(125px,35vw);height:13px;background:#5a1717;border:1px solid #eee;display:inline-block;vertical-align:middle;margin-left:7px}
+#hpfill{height:100%;width:100%;background:#f4dc4b;transition:width .2s}
+#enemybar{width:min(125px,35vw);height:10px;background:#333;border:1px solid #aaa;display:inline-block;vertical-align:middle;margin-left:7px}
+#enemyfill{height:100%;width:100%;background:#e64b4b;transition:width .2s}
+#dialogue{min-height:66px;border:2px solid #eee;padding:11px 13px;font-size:15px;line-height:1.55;white-space:pre-wrap}
+#arena{display:none;position:relative;width:min(100%,540px);height:260px;margin:0 auto;border:3px solid white;background:#050505;overflow:hidden;touch-action:none}
+#soul{position:absolute;width:14px;height:14px;background:#ff3030;transform:rotate(45deg);left:calc(50% - 7px);top:calc(50% - 7px);box-shadow:0 0 8px #ff3030;z-index:2}
+#soul:before,#soul:after{content:"";position:absolute;width:14px;height:14px;background:#ff3030;border-radius:50%}
+#soul:before{left:-7px;top:0}#soul:after{left:0;top:-7px}
+.bullet{position:absolute;width:12px;height:12px;background:#fff;border-radius:2px;box-shadow:0 0 5px #fff;pointer-events:none}
+.bullet.gold{background:#ffdc55;box-shadow:0 0 7px #ffdc55;border-radius:50%}
+#arenaLabel{position:absolute;top:5px;left:8px;font-size:11px;color:#aaa;pointer-events:none}
+#controls{display:none;grid-template-columns:repeat(3,54px);grid-template-rows:repeat(2,44px);gap:5px;justify-content:center}
+#controls button{padding:0;font-size:20px}
+#controls .up{grid-column:2;grid-row:1}#controls .left{grid-column:1;grid-row:2}#controls .down{grid-column:2;grid-row:2}#controls .right{grid-column:3;grid-row:2}
+#choices{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+#commands{display:grid;grid-template-columns:repeat(4,1fr);gap:9px}
+#commands button{font-size:clamp(13px,2.6vw,16px)}
+.hint{text-align:center;color:#999;font-size:11px;line-height:1.5}
+#log{color:#aaa;font-size:12px;min-height:18px;text-align:center}
+@media(max-width:560px){#commands{grid-template-columns:repeat(2,1fr)}#controls{display:grid}#dialogue{font-size:14px}#arena{height:230px}#status{font-size:12px}}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<main id="game">
+<header><h1>SOULBOUND</h1><div class="subtitle">A SMALL RPG ABOUT CHOICES</div></header>
+<section id="scene"><div id="enemy">♟</div><div id="enemyName">迷子の番人</div></section>
+<div id="status">
+  <span>HP <b id="hpText">20 / 20</b><span id="hpbar"><span id="hpfill"></span></span></span>
+  <span style="text-align:right">ENEMY <b id="enemyHpText">36 / 36</b><span id="enemybar"><span id="enemyfill"></span></span></span>
+  <span id="turnText">TURN 1</span><span id="itemText" style="text-align:right">回復薬 × 2</span>
+</div>
+<div id="dialogue" aria-live="polite">＊ 暗闇の向こうから、小さな影が現れた。</div>
+<div id="arena"><span id="arenaLabel">SOULを操作して攻撃を避けよう</span><div id="soul"></div></div>
+<div id="controls" aria-label="魂の移動操作">
+<button class="up" data-dir="up">▲</button><button class="left" data-dir="left">◀</button><button class="down" data-dir="down">▼</button><button class="right" data-dir="right">▶</button>
+</div>
+<div id="choices"></div>
+<nav id="commands">
+<button data-action="fight">たたかう</button><button data-action="act">こうどう</button><button data-action="item">アイテム</button><button data-action="mercy">みのがす</button>
+</nav>
+<div id="log">PC：矢印キー / WASD　・　スマホ：方向ボタン</div>
+<div class="hint">この作品は既存作品のキャラクター・音楽・画像を使用しないオリジナル作品です。</div>
+</main>
+<script>
+(()=>{
+"use strict";
+const $=id=>document.getElementById(id);
+const arena=$("arena"),soulEl=$("soul"),enemyEl=$("enemy"),dialogue=$("dialogue"),choices=$("choices");
+const MAX_HP=20;
+let hp=MAX_HP,enemyHp=36,turn=1,phase="menu",items=2,kind=0,mercy=0,invuln=0,raf=0,last=0,elapsed=0;
+let bullets=[],keys={},soul={x:0,y:0},pattern=0,attackSpawn=0,ending=false;
+const enemyStates=[
+ {name:"迷子の番人",face:"♟",max:36},
+ {name:"記憶をなくした影",face:"♜",max:44},
+ {name:"夜明けの門番",face:"♛",max:52}
+];
+function say(t){dialogue.textContent="＊ "+t}
+function status(){
+ $("hpText").textContent=hp+" / "+MAX_HP;
+ $("hpfill").style.width=(hp/MAX_HP*100)+"%";
+ $("enemyHpText").textContent=Math.max(0,enemyHp)+" / "+enemyStates[kind].max;
+ $("enemyfill").style.width=(Math.max(0,enemyHp)/enemyStates[kind].max*100)+"%";
+ $("turnText").textContent="TURN "+turn;
+ $("itemText").textContent="回復薬 × "+items;
+}
+function clearChoices(){choices.replaceChildren()}
+function choice(label,fn,disabled=false){const b=document.createElement("button");b.textContent=label;b.disabled=disabled;b.addEventListener("click",fn);choices.appendChild(b)}
+function lock(v){document.querySelectorAll("#commands button").forEach(b=>b.disabled=v)}
+function cleanBullets(){bullets.forEach(b=>b.el.remove());bullets=[]}
+function showMenu(message="どうする？"){
+ phase="menu";arena.style.display="none";$("controls").style.display=innerWidth<=560?"grid":"none";
+ clearChoices();lock(false);if(message)say(message);status();
+}
+function drawSoul(){soulEl.style.left=(soul.x-7)+"px";soulEl.style.top=(soul.y-7)+"px"}
+function addBullet(x,y,vx,vy,gold=false,size=12){
+ const el=document.createElement("i");el.className="bullet"+(gold?" gold":"");el.style.width=size+"px";el.style.height=size+"px";arena.appendChild(el);
+ bullets.push({x,y,vx,vy,el,r:size/2});
+}
+function spawnPattern(){
+ const w=arena.clientWidth,h=arena.clientHeight;
+ const rand=(a,b)=>a+Math.random()*(b-a);
+ if(pattern%3===0){
+   const edge=Math.floor(Math.random()*4);let x,y,vx,vy;
+   if(edge===0){x=rand(0,w);y=-12;vx=rand(-.8,.8);vy=rand(2.1,3.1)}
+   else if(edge===1){x=w+12;y=rand(0,h);vx=-rand(2.1,3.1);vy=rand(-.8,.8)}
+   else if(edge===2){x=rand(0,w);y=h+12;vx=rand(-.8,.8);vy=-rand(2.1,3.1)}
+   else{x=-12;y=rand(0,h);vx=rand(2.1,3.1);vy=rand(-.8,.8)}
+   addBullet(x,y,vx,vy,Math.random()<.25);
+ } else if(pattern%3===1){
+   const x=rand(10,w-10);for(let i=0;i<3;i++)addBullet(x+i*17, -10,rand(-.35,.35),2.5+i*.18,i===1);
+ } else {
+   const side=Math.random()<.5?0:w;const y=rand(20,h-20);
+   for(let i=-1;i<=1;i++)addBullet(side,y+i*20,side===0?2.7:-2.7,i*.65,true);
+ }
+}
+function enemyAttack(){
+ phase="dodge";arena.style.display="block";$("controls").style.display=innerWidth<=560?"grid":"none";
+ clearChoices();lock(true);cleanBullets();
+ soul={x:arena.clientWidth/2,y:arena.clientHeight/2};drawSoul();
+ pattern=(turn+kind)%3;elapsed=0;last=0;attackSpawn=0;invuln=0;
+ $("arenaLabel").textContent=["流れる弾を避けよう","上からの連続攻撃！","横から来る光弾に注意！"][pattern];
+ say("＊ "+enemyStates[kind].name+"の攻撃！ ハートを操作して避けよう。");
+ cancelAnimationFrame(raf);raf=requestAnimationFrame(loop);
+}
+function loop(ts){
+ if(phase!=="dodge")return;
+ const dt=Math.min((ts-last||16)/16,2);last=ts;elapsed+=dt;attackSpawn+=dt;
+ const speed=3.7*dt;
+ if(keys.ArrowUp||keys.w||keys.W)soul.y-=speed;
+ if(keys.ArrowDown||keys.s||keys.S)soul.y+=speed;
+ if(keys.ArrowLeft||keys.a||keys.A)soul.x-=speed;
+ if(keys.ArrowRight||keys.d||keys.D)soul.x+=speed;
+ soul.x=Math.max(10,Math.min(arena.clientWidth-10,soul.x));soul.y=Math.max(10,Math.min(arena.clientHeight-10,soul.y));drawSoul();
+ if(attackSpawn>=(pattern===1?25:17)){spawnPattern();attackSpawn=0}
+ for(let i=bullets.length-1;i>=0;i--){
+  const b=bullets[i];b.x+=b.vx*dt;b.y+=b.vy*dt;
+  b.el.style.transform=`translate(${b.x-b.r}px,${b.y-b.r}px)`;
+  if(Math.hypot(b.x-soul.x,b.y-soul.y)<b.r+7&&invuln<=0){
+   hp=Math.max(0,hp-2);invuln=42;status();soulEl.style.opacity=".25";
+   setTimeout(()=>{soulEl.style.opacity="1"},160);
+   if(hp===0){finish(false);return}
+  }
+  if(b.x<-35||b.x>arena.clientWidth+35||b.y<-35||b.y>arena.clientHeight+35){b.el.remove();bullets.splice(i,1)}
+ }
+ if(invuln>0)invuln-=dt;
+ if(elapsed>390){
+  cancelAnimationFrame(raf);cleanBullets();turn++;status();showMenu("＊ 攻撃をしのいだ。次の行動を選ぼう。");return;
+ }
+ raf=requestAnimationFrame(loop);
+}
+function afterAction(message){say(message);choice("ターンを進める",enemyAttack);choice("戻る",()=>showMenu("どうする？"))}
+function fight(){
+ phase="choice";clearChoices();say("＊ タイミングよく攻撃を決めよう。");
+ choice("HIT！",()=>{
+  const damage=12+(Math.random()<.25?6:0);enemyHp=Math.max(0,enemyHp-damage);
+  enemyEl.style.transform="translateX(10px) rotate(4deg)";
+  setTimeout(()=>enemyEl.style.transform="",140);status();
+  $("log").textContent="攻撃！ "+damage+" ダメージ";
+  if(enemyHp<=0){advanceEnemy()}else{afterAction("＊ 番人は少しよろめいた。")}
+ });
+ choice("戻る",()=>showMenu("どうする？"));
+}
+function act(){
+ phase="choice";clearChoices();say("＊ 相手をよく見て行動する。");
+ if(kind===0){
+  choice("話しかける",()=>{mercy++;afterAction("＊ 番人「ここを守る理由を、まだ思い出せないんだ。」")});
+  choice("落とし物を見せる",()=>{mercy+=2;afterAction("＊ 番人の目に、懐かしそうな光が戻った。")});
+  choice("静かに待つ",()=>{mercy++;afterAction("＊ 番人は少しだけ警戒を解いた。")});
+ }else if(kind===1){
+  choice("名前を尋ねる",()=>{mercy++;afterAction("＊ 影は自分の名前を思い出そうとしている。")});
+  choice("手を差し伸べる",()=>{mercy+=2;afterAction("＊ 影はあなたの手を見つめている。")});
+ }else{
+  choice("門の向こうを尋ねる",()=>{mercy++;afterAction("＊ 門番「その先には、あなたの答えがある。」")});
+  choice("感謝を伝える",()=>{mercy+=2;afterAction("＊ 門番は静かにうなずいた。")});
+ }
+ choice("観察する",()=>afterAction("＊ 攻撃の合間に、相手はこちらの様子をうかがっている。"));
+ choice("戻る",()=>showMenu("どうする？"));
+}
+function item(){
+ phase="choice";clearChoices();say("＊ バッグの中を調べた。");
+ if(items>0&&hp<MAX_HP)choice("小さな回復薬（HP +8）",()=>{
+  items--;hp=Math.min(MAX_HP,hp+8);status();afterAction("＊ 回復薬を使った。HPが回復した。");
+ });
+ if(items>0&&hp===MAX_HP)choice("小さな回復薬（HP +8）",()=>say("＊ HPは満タンだ。今は使えない。"),true);
+ if(items===0)choice("空のポーチ",()=>say("＊ もう回復薬は残っていない。"));
+ choice("戻る",()=>showMenu("どうする？"));
+}
+function mercyAction(){
+ if(mercy>=(kind===0?3:kind===1?2:2)){
+  if(kind===0){finish(true,"＊ 番人は大切な記憶を取り戻し、道をあけた。");return}
+  if(kind===1){finish(true,"＊ 影はあなたの手を取り、光の中へ消えていった。");return}
+  finish(true,"＊ 門番は微笑み、最後の扉を開いた。");return;
+ }
+ say("＊ まだ相手の心は揺れている。もう少し向き合ってみよう。");
+ enemyAttack();
+}
+function advanceEnemy(){
+ cleanBullets();
+ if(kind<enemyStates.length-1){
+  kind++;enemyHp=enemyStates[kind].max;mercy=0;
+  enemyEl.textContent=enemyStates[kind].face;$("enemyName").textContent=enemyStates[kind].name;
+  status();showMenu("＊ 新たな気配が現れた。"+enemyStates[kind].name+"が立ちはだかる。");
+ }else finish(true,"＊ すべての番人が道をあけた。あなたは自分の答えを見つけた。");
+}
+function finish(win,message){
+ phase="end";ending=true;cancelAnimationFrame(raf);cleanBullets();arena.style.display="none";$("controls").style.display="none";lock(true);clearChoices();
+ if(win){enemyEl.textContent="✦";say(message||"＊ 番人は静かに道をあけた。あなたは先へ進んだ。");}
+ else say("＊ あなたのSOULは力尽きた……。");
+ $("log").textContent=win?"ENDING：やさしさが道をひらいた":"GAME OVER";
+ choice("最初から",()=>location.reload());
+}
+document.querySelectorAll("[data-action]").forEach(b=>b.addEventListener("click",()=>{
+ if(phase!=="menu")return;
+ ({fight,act,item,mercy:mercyAction})[b.dataset.action]();
+}));
+document.addEventListener("keydown",e=>{
+ const k=e.key;if(["ArrowUp","ArrowDown","ArrowLeft","ArrowRight"," "].includes(k))e.preventDefault();
+ keys[k]=true;
+});
+document.addEventListener("keyup",e=>keys[e.key]=false);
+document.querySelectorAll("[data-dir]").forEach(b=>{
+ const map={up:"ArrowUp",down:"ArrowDown",left:"ArrowLeft",right:"ArrowRight"},k=map[b.dataset.dir];
+ b.addEventListener("pointerdown",e=>{e.preventDefault();keys[k]=true;b.setPointerCapture?.(e.pointerId)});
+ ["pointerup","pointerleave","pointercancel","lostpointercapture"].forEach(ev=>b.addEventListener(ev,()=>keys[k]=false));
+});
+window.addEventListener("blur",()=>{keys={}});
+window.addEventListener("resize",()=>{if(phase==="dodge"){$("controls").style.display=innerWidth<=560?"grid":"none"}});
+status();showMenu("＊ 暗闇の向こうから、小さな影が現れた。");
+})();
+</script>
+</body>
+</html>
