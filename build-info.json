@@ -1,0 +1,7 @@
+{
+  "product": "JR Cconventional-line Radio Receiver",
+  "version": "1.6.0",
+  "revision": "9b6a18c2faa4aca53173f19b6354e5fde8b859be",
+  "target": "linux-x86_64",
+  "soapysdr_abi": "0.8"
+}
