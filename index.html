@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>運行表示アプリ（名鉄風）</title>
+<style>
+:root{--ink:#111;--paper:#f2f3f5;--line:#222;--gray:#c4c7cc;--orange:#e07a1a;--red:#c8101e;--blue:#6fb4e6;--yellow:#e6b830;}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:#1b2330;font-family:"Hiragino Sans","Noto Sans JP",sans-serif;color:var(--ink)}
+#app{max-width:820px;margin:0 auto;min-height:100%;background:var(--paper);display:grid;grid-template-columns:1fr 38%;grid-template-rows:auto auto auto 1fr;padding-top:env(safe-area-inset-top,0px)}
+.bar{grid-column:1/3;display:flex;justify-content:space-between;align-items:center;padding:6px 12px;font-size:14px;background:#e8e9ec}
+.bar b{color:#d33;font-weight:400}
+.bar button{width:44px;height:28px;border:1px solid #888;border-radius:5px;background:#f8f8f8;margin-left:6px}
+.type{background:#000;color:#fff;font-size:min(10vw,64px);text-align:center;padding:2px 0;letter-spacing:.1em}
+.cars{display:flex;align-items:center;justify-content:space-between;background:#fff;font-size:min(11vw,64px);padding:0 10px;border-left:1px solid var(--line)}
+.cars small{font-size:16px}.cars span.t{font-size:min(5vw,28px);writing-mode:vertical-rl;letter-spacing:.2em}
+.meta{display:grid;grid-template-columns:1fr 1fr;border-top:1px solid var(--line);font-size:min(4.5vw,24px);text-align:center}
+.meta div{padding:5px;border-bottom:1px solid var(--line);border-right:1px solid var(--line);background:#fff}
+.meta .big{font-size:min(6vw,32px);font-weight:600}
+#tt{grid-column:1;border-right:1px solid var(--line)}
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+td{border:1px solid var(--line);height:clamp(40px,7vh,56px);padding:0 6px;font-size:min(5.6vw,32px);white-space:nowrap}
+td.n{font-size:min(4.5vw,24px);width:30%;background:#fff}
+td sup{font-size:.5em;margin-left:3px}
+tr.now td{background:#ffe9a8}tr.next td.n{background:var(--orange);color:#fff}
+tr.done td{color:#999;background:#e4e4e4}
+.x{width:20px;text-align:center;padding:0;font-size:20px}
+aside{display:flex;flex-direction:column;background:#fff}
+.hd{background:var(--gray);padding:6px;text-align:center;font-size:min(4.5vw,24px)}
+.sec{background:#8f94a0;color:#fff;font-size:13px;padding:2px 6px}
+.clock{background:var(--red);color:#fff;text-align:center;padding:8px 0;cursor:pointer}
+.clock svg{width:min(18vw,110px);background:#fff;border-radius:50%}
+.clock .d{font-size:min(6.5vw,40px);margin-top:4px;font-variant-numeric:tabular-nums}
+.val{padding:8px;text-align:center;font-size:min(5vw,26px)}
+.val .row{display:flex;justify-content:center;gap:12px;align-items:center}
+.val .tag{background:var(--blue);padding:2px 8px;font-size:18px}
+.notice{background:var(--yellow);padding:4px 6px;font-size:14px}
+.msg{padding:8px;font-size:min(4vw,18px);line-height:1.5}
+.ctl{font-size:12px;padding:6px;color:#555}
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="bar"><span>神乗 <b>(土休日)</b></span><span>☀ <button onclick="bright(-.1)">-</button><button onclick="bright(.1)">+</button></span></div>
+  <div class="type" id="type">普通</div>
+  <div class="cars"><span><span id="cars">4</span><small> 両</small></span><span class="t">通告</span></div>
+  <div class="meta">
+    <div id="from">富貴</div><div>設定番号　<span id="setno">0001</span></div>
+    <div class="big" id="to">内海</div><div class="big" id="train">1620S列車</div>
+  </div>
+  <div id="tt"><table id="tbl"></table></div>
+  <aside>
+    <div class="hd" id="state">乗務中</div>
+    <div class="clock" onclick="toggleSim()" title="タップで実時刻/デモ時刻切替">
+      <svg viewBox="-50 -50 100 100"><g id="ticks"></g>
+        <line id="hh" y2="-24" stroke="#000" stroke-width="3"/><line id="mm" y2="-36" stroke="#000" stroke-width="2"/><line id="ss" y2="-40" stroke="#c00" stroke-width="1"/></svg>
+      <div class="d" id="digital">--:--:--</div>
+    </div>
+    <div class="sec">走行地点</div><div class="val" id="loc">富貴</div>
+    <div class="sec">先頭車号</div><div class="val"><div class="row"><span id="car">3529</span><span class="tag">簡</span></div></div>
+    <div class="hd">運転概況確認</div>
+    <div class="notice">個人通告</div>
+    <div class="msg" id="msg">1223S 別曽池信号場　団4と臨時行違い</div>
+    <div class="ctl" id="ctl">時計をタップ：デモ時刻(16:02:30)⇔実時刻</div>
+  </aside>
+</div>
+<script>
+// ===== 運行データ（ここを書き換えて自由に編集） =====
+const TRAIN={type:"普通",cars:4,from:"富貴",to:"内海",no:"1620S列車",set:"0001",car:"3529",
+  notice:"1223S 別曽池信号場　団4と臨時行違い"};
+// [駅名, 着, 発, 通過待ち/行違い×]  時刻は "HH:MM:SS"
+const ROWS=[
+ ["富貴",null,"16:04:00"],
+ ["別曽池",null,"16:07:00"],
+ ["上野間","16:09:25","16:09:55"],
+ ["美浜緑苑","16:11:25","16:11:55"],
+ ["知多奥田","16:13:50","16:14:20",true],
+ ["野間","16:16:15","16:16:45"],
+ ["内海","16:21:10",null],
+];
+// ===== 以下ロジック =====
+const $=id=>document.getElementById(id);
+const sec=s=>{if(!s)return null;const[a,b,c]=s.split(":").map(Number);return a*3600+b*60+(c||0)};
+const fmt=s=>{if(!s)return"";const[a,b,c]=s.split(":");return`${a}:${b}<sup>${c}</sup>`};
+let sim=true,offset=0;
+const DEMO=sec("16:02:30");
+function now(){const d=new Date();const real=d.getHours()*3600+d.getMinutes()*60+d.getSeconds();return sim?DEMO+Math.floor((Date.now()-t0)/1000):real}
+let t0=Date.now();
+function toggleSim(){sim=!sim;t0=Date.now();$("ctl").textContent=sim?"デモ時刻で進行中（タップで実時刻）":"実時刻（タップでデモ時刻）"}
+function head(){$("type").textContent=TRAIN.type;$("cars").textContent=TRAIN.cars;$("from").textContent=TRAIN.from;
+  $("to").textContent=TRAIN.to;$("train").textContent=TRAIN.no;$("setno").textContent=TRAIN.set;$("car").textContent=TRAIN.car;$("msg").textContent=TRAIN.notice;
+  let t="";for(let i=0;i<60;i++){const a=i*6*Math.PI/180,l=i%5?2:5;t+=`<line x1="${Math.sin(a)*47}" y1="${-Math.cos(a)*47}" x2="${Math.sin(a)*(47-l)}" y2="${-Math.cos(a)*(47-l)}" stroke="#000" stroke-width="${i%5?.5:1.2}"/>`}$("ticks").innerHTML=t;}
+function render(){
+  const n=now(),h=Math.floor(n/3600)%24,m=Math.floor(n/60)%60,s=n%60,p=x=>String(x).padStart(2,"0");
+  $("digital").textContent=`${p(h)} : ${p(m)} : ${p(s)}`;
+  $("hh").style.transform=`rotate(${(h%12+m/60)*30}deg)`;$("mm").style.transform=`rotate(${(m+s/60)*6}deg)`;$("ss").style.transform=`rotate(${s*6}deg)`;
+  let html="",nextIdx=-1,cur=-1;
+  ROWS.forEach((r,i)=>{const a=sec(r[1]),d=sec(r[2]);
+    if(nextIdx<0&&(a||d)>n)nextIdx=i;
+    if(a&&d&&n>=a&&n<d)cur=i;});
+  if(nextIdx<0)nextIdx=ROWS.length;
+  ROWS.forEach((r,i)=>{const cls=i===cur?"now":i<nextIdx?"done":i===nextIdx?"next":"";
+    html+=`<tr class="${cls}"><td class="n">${r[0]}</td><td>${fmt(r[1])}</td><td class="x">${r[3]?"×":""}</td><td>${fmt(r[2])}</td></tr>`});
+  for(let i=ROWS.length;i<14;i++)html+=`<tr><td class="n"></td><td></td><td class="x"></td><td></td></tr>`;
+  $("tbl").innerHTML=html;
+  const last=ROWS.length-1,end=n>=sec(ROWS[last][1]);
+  $("state").textContent=end?"乗務終了":"乗務中";
+  $("loc").textContent=cur>=0?ROWS[cur][0]:ROWS[Math.max(0,nextIdx-1)][0];
+}
+function bright(d){const b=document.documentElement.style.filter.match(/[\d.]+/);let v=(b?+b[0]:1)+d;v=Math.min(1.3,Math.max(.5,v));document.documentElement.style.filter=`brightness(${v})`}
+head();render();setInterval(render,500);
+</script>
+</body>
+</html>
